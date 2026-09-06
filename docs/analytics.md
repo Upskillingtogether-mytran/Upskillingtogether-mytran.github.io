@@ -70,6 +70,14 @@ Use a separate PostHog test project or build with environment `demo`. Do not run
 
 Local test bookings affect only the testing browser and origin. No automatic synthetic traffic is sent, and no simulation rewrites real availability.
 
+## Synthetic assessment traffic
+
+`scripts/generate-synthetic-posthog-demo.ts` generates exactly 150 anonymous, fictional visitor journeys. It sends analytics events directly to PostHog; it never loads the Site, creates a booking, marks a slot unavailable, or calls the notification integration. Every event carries `data_source: "synthetic_demo"`, `analytics_environment: "demo"`, `is_demo: true`, and a `synthetic_run_id`.
+
+The generator is dry-run by default. Sending requires `--send`, `SYNTHETIC_DEMO_CONFIRM=I_UNDERSTAND_THIS_WRITES_DEMO_ANALYTICS`, and an explicit confirmation that the current PostHog project is a demo project. It uses 150 unique `distinct_id` and session IDs, with shared IDs inside each visitor journey. Every run gets a unique `synthetic_run_id` and deterministic `$insert_id` values; set `SYNTHETIC_DEMO_RUN_ID` only when deliberately reproducing one run. The generated source/device data are Facebook/social/local-parent-group, direct, newsletter/email/school-news, or flyer-QR/offline; Mobile is the largest device segment.
+
+PostHog reports can exclude the data with `data_source != synthetic_demo`, or isolate one generation with `synthetic_run_id`. The intended cleanup path is to retain this clearly labelled assessment dataset in the demo project, or delete/reset that demo project when it is no longer needed.
+
 ## References
 
 - https://posthog.com/docs/libraries/next-js

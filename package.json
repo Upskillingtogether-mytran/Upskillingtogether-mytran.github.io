@@ -11,7 +11,9 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
-    "test:analytics": "node --experimental-strip-types --test tests/analytics.test.mjs"
+    "test:analytics": "node --experimental-strip-types --test tests/analytics.test.mjs",
+    "test:synthetic": "node --experimental-strip-types --test tests/synthetic-traffic.test.mjs",
+    "generate:synthetic-demo": "node --experimental-strip-types scripts/generate-synthetic-posthog-demo.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
