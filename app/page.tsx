@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
+import { initializeAnalytics, track } from '@/lib/analytics';
+import { tutorProperties, bookingProperties } from '@/lib/analytics-policy';
 import {
   ArrowRight,
   ArrowLeft,
@@ -116,7 +118,57 @@ export default function Home() {
     [busy, setBusy] = useState(false),
     [confirmation, setConfirmation] = useState<Booking | null>(null);
   const [schedule, setSchedule] = useState<Record<string, string[]>>({});
+  const attemptId = useRef('');
+  const formStarted = useRef(false);
+  const submitting = useRef(false);
+  const currentFilters = useRef({
+    subject: 'all',
+    grade: 'all',
+    availability: false,
+  });
   const modalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    initializeAnalytics();
+  }, []);
+  function applyFilter(
+    type: 'subject' | 'grade' | 'availability',
+    value: string | boolean,
+  ) {
+    if (currentFilters.current[type] === value) return;
+    if (type === 'subject') {
+      currentFilters.current.subject = String(value);
+      setSubject(String(value));
+    }
+    if (type === 'grade') {
+      currentFilters.current.grade = String(value);
+      setGrade(String(value));
+    }
+    if (type === 'availability') {
+      currentFilters.current.availability = Boolean(value);
+      setAvailableOnly(Boolean(value));
+    }
+    track('tutor_filter_applied', { filter_type: type, filter_value: value });
+  }
+  function clearFilters() {
+    applyFilter('subject', 'all');
+    applyFilter('grade', 'all');
+    applyFilter('availability', false);
+  }
+  function startForm(next = form) {
+    if (formStarted.current || !selected || !slot) return;
+    formStarted.current = true;
+    track(
+      'booking_form_started',
+      bookingProperties(
+        selected,
+        next.subject,
+        next.grade,
+        slot,
+        attemptId.current,
+      ),
+    );
+  }
+
   const lastTutorButton = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     const refresh = () => {
@@ -156,6 +208,12 @@ export default function Home() {
       (!availableOnly || available(t).length > 0),
   );
   function openTutor(t: Tutor) {
+    attemptId.current = crypto.randomUUID();
+    formStarted.current = false;
+    track('tutor_viewed', {
+      ...tutorProperties(t),
+      booking_attempt_id: attemptId.current,
+    });
     setSelected(t);
     setSlot('');
     setStep('time');
@@ -176,7 +234,7 @@ export default function Home() {
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected || busy) return;
+    if (!selected || busy || submitting.current) return;
     const input = { ...form, tutorId: selected.id, slot };
     const invalid = validateBooking(input);
     setErrors(invalid);
@@ -188,9 +246,20 @@ export default function Home() {
       );
       return;
     }
+    submitting.current = true;
     setBusy(true);
     try {
       const booking = await createBooking(input);
+      track(
+        'booking_completed',
+        bookingProperties(
+          selected,
+          booking.subject,
+          booking.grade,
+          booking.slot,
+          attemptId.current,
+        ),
+      );
       setBooked(readBooked());
       setConfirmation(booking);
       setStep('done');
@@ -202,6 +271,7 @@ export default function Home() {
             : 'We couldn’t save your booking. Please try again.',
       });
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -243,9 +313,9 @@ export default function Home() {
           (!Number.isInteger(p.grade) || p.grade < 0 || p.grade > 12)
         )
           throw new Error('Grade must be 0–12.');
-        setSubject(p.subject ?? 'all');
-        setGrade(p.grade === undefined ? 'all' : String(p.grade));
-        setAvailableOnly(false);
+        applyFilter('subject', p.subject ?? 'all');
+        applyFilter('grade', p.grade === undefined ? 'all' : String(p.grade));
+        applyFilter('availability', false);
         document.getElementById('tutors')?.scrollIntoView();
         const reserved = readBooked();
         return tutors
@@ -332,7 +402,7 @@ export default function Home() {
               id="subject-filter"
               label="Subject"
               value={subject}
-              onChange={setSubject}
+              onChange={(v) => applyFilter('subject', v)}
               options={[
                 { value: 'all', label: 'All subjects' },
                 ...subjects.map((s) => ({ value: s, label: s })),
@@ -342,7 +412,7 @@ export default function Home() {
               id="grade-filter"
               label="Student grade"
               value={grade}
-              onChange={setGrade}
+              onChange={(v) => applyFilter('grade', v)}
               options={[
                 { value: 'all', label: 'All grades' },
                 ...Array.from({ length: 13 }, (_, i) => ({
@@ -354,7 +424,7 @@ export default function Home() {
             <label className="check-label">
               <Checkbox
                 checked={availableOnly}
-                onCheckedChange={setAvailableOnly}
+                onCheckedChange={(v) => applyFilter('availability', v)}
                 disabled={!ready}
               />{' '}
               Has available sessions
@@ -370,14 +440,7 @@ export default function Home() {
                 : ' ready to help'}
             </p>
             {(subject !== 'all' || grade !== 'all' || availableOnly) && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  setSubject('all');
-                  setGrade('all');
-                  setAvailableOnly(false);
-                }}
-              >
+              <button className="text-button" onClick={clearFilters}>
                 Clear filters
               </button>
             )}
@@ -446,14 +509,7 @@ export default function Home() {
               <BookOpen size={30} />
               <h3>No tutors match just yet</h3>
               <p>Try another subject or grade to see more options.</p>
-              <button
-                className="secondary"
-                onClick={() => {
-                  setSubject('all');
-                  setGrade('all');
-                  setAvailableOnly(false);
-                }}
-              >
+              <button className="secondary" onClick={clearFilters}>
                 Show all tutors
               </button>
             </div>
@@ -536,6 +592,17 @@ export default function Home() {
                                   aria-pressed={slot === s}
                                   className={`time-slot ${slot === s ? 'selected' : ''}`}
                                   onClick={() => {
+                                    formStarted.current = false;
+                                    track(
+                                      'time_slot_selected',
+                                      bookingProperties(
+                                        selected,
+                                        form.subject,
+                                        form.grade,
+                                        s,
+                                        attemptId.current,
+                                      ),
+                                    );
                                     setSlot(s);
                                     setStep('form');
                                     setErrors({});
@@ -593,7 +660,11 @@ export default function Home() {
                         .timeZone.replaceAll('_', ' ')}
                     </span>
                   </div>
-                  <form onSubmit={submit} noValidate className="booking-form">
+                  <form
+                    onSubmit={submit}
+                    noValidate
+                    className="booking-form ph-no-capture ph-no-autocapture"
+                  >
                     <div className="form-fields">
                       {(
                         [
@@ -626,9 +697,10 @@ export default function Home() {
                             required
                             maxLength={f.name === 'email' ? 254 : 80}
                             value={form[f.name]}
-                            onChange={(e) =>
-                              setForm({ ...form, [f.name]: e.target.value })
-                            }
+                            onChange={(e) => {
+                              if (e.target.value.trim()) startForm();
+                              setForm({ ...form, [f.name]: e.target.value });
+                            }}
                             aria-invalid={!!errors[f.name]}
                             aria-describedby={
                               errors[f.name] ? `${f.name}-error` : undefined
@@ -645,7 +717,11 @@ export default function Home() {
                         id="student-grade"
                         label="Student grade"
                         value={form.grade}
-                        onChange={(v) => setForm({ ...form, grade: v })}
+                        onChange={(v) => {
+                          const next = { ...form, grade: v };
+                          if (v !== form.grade) startForm(next);
+                          setForm(next);
+                        }}
                         options={[
                           { value: '', label: 'Choose a grade' },
                           ...selected.grades.map((g) => ({
@@ -659,7 +735,11 @@ export default function Home() {
                         id="booking-subject"
                         label="Subject"
                         value={form.subject}
-                        onChange={(v) => setForm({ ...form, subject: v })}
+                        onChange={(v) => {
+                          const next = { ...form, subject: v };
+                          if (v !== form.subject) startForm(next);
+                          setForm(next);
+                        }}
                         options={selected.subjects.map((s) => ({
                           value: s,
                           label: s,

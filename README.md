@@ -15,6 +15,7 @@ Mobile-first tutoring search and booking prototype. Built with React, Vinext, an
 - Contact/student details stay in memory; only reservation identifiers and timestamps are persisted. No payments, emails, or texts are sent.
 - `lib/notifications.ts` is the isolated notification integration boundary for part two.
 - A feature-detected `find_tutors` WebMCP tool shares the visible filter state.
+- PostHog analytics track tutor filters, intentional profile views, time selection, meaningful booking-form starts, and completed bookings without sending parent or student information. See [the analytics guide](docs/analytics.md).
 
 ## Prototype boundaries for part two
 
@@ -27,6 +28,7 @@ Schedules are fictional and generated for the next 14 days in the visitor's time
 - Subject and grade picker interactions, empty state, and clear filters.
 - 320px phone and desktop layout checks, image loading, horizontal overflow checks.
 - WebMCP valid filter input and invalid subject rejection.
+- PostHog event privacy and attribution tests, production bundle verification, and a live ingestion check with a clearly marked non-personal test event.
 
 ## Photo sources
 
