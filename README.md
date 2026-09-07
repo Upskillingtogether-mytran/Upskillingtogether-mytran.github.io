@@ -2,7 +2,7 @@
 
 Mobile-first tutoring search and booking prototype. Built with React, Vinext, and the installed Base UI/Shadcn components.
 
-Link: https://abc-tutoring-dana.trandieumy2k3.chatgpt.site/
+Link: https://upskillingtogether-mytran.github.io/
 
 ## Local development
 
